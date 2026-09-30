@@ -98,6 +98,23 @@ def repack_block(d, b, new_strs, ext):
     struct.pack_into('<%dI' % len(offs), d, to, *offs)
 
 
+def patch_sfo_title(iso_path, title):
+    import pycdlib
+    iso = pycdlib.PyCdlib(); iso.open(SRC_ISO)
+    rec = iso.get_record(iso_path='/PSP_GAME/PARAM.SFO'); lba = rec.extent_location(); iso.close()
+    f = open(iso_path, 'r+b'); f.seek(lba * 2048); d = bytearray(f.read(2048))
+    kt, dt, n = struct.unpack_from('<III', d, 8)
+    for i in range(n):
+        ko, fmt, ln, mx, do = struct.unpack_from('<HHIII', d, 20 + 16 * i)
+        k = d[kt + ko:d.index(0, kt + ko)].decode()
+        if k == 'TITLE':
+            v = title.encode('utf8') + bytes(1)
+            assert len(v) <= mx
+            d[dt + do:dt + do + mx] = v + bytes(mx - len(v))
+            struct.pack_into('<I', d, 20 + 16 * i + 4, len(v))
+    f.seek(lba * 2048); f.write(d); f.close()
+
+
 def main(out_iso):
     U, tr = load_translations()
     missing = [i for i in range(len(U)) if i not in tr]
@@ -204,8 +221,18 @@ def main(out_iso):
                 nimg += 1
         print('이미지', nimg, '곳 수정')
 
+    # save-data / system texts (UTF-8 tables in dig 0012, members 3 and 5)
+    sysd = json.load(open('translation/sys_strings.json', encoding='utf8'))
+    from utf8tab import build as build_utf8
+    d = replaced.setdefault(12, bytearray(open('work/dig/0012.bin', 'rb').read()))
+    M12 = {m['id']: m for m in members(d)}
+    for mid, strs in sysd.items():
+        m = M12[int(mid)]
+        d[m['off']:m['off'] + m['size']] = build_utf8(bytes(d[m['off']:m['off'] + m['size']]), strs)
+
     build_dig({k: bytes(v) for k, v in replaced.items()}, 'work/cfc_kr.dig')
     build_iso(SRC_ISO, 'work/cfc_kr.dig', out_iso)
+    patch_sfo_title(out_iso, sysd['3'][1])
     print('완료', out_iso)
 
 

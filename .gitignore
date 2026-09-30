@@ -13,3 +13,4 @@ work/
 __pycache__/
 *.dig
 *.ppdmp
+dlc/
