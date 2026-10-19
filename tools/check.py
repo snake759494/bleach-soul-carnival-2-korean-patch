@@ -7,6 +7,16 @@ ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 d=open(os.path.join(ROOT,'work/dig/0002.bin'),'rb').read(); M=members(d)
 W=d[M[4]['off']:M[4]['off']+M[4]['size']]
 U=json.load(open(os.path.join(ROOT,'work/uniq_codes.json')))
+# a UI field is sized for the longest entry of its table: per string, the widest original line among all tables it appears in
+def _tablemax():
+    B=json.load(open(os.path.join(ROOT,'work/blocks.json'))); idx={tuple(s):i for i,s in enumerate(U)}; tm={}
+    for b in B:
+        w=max([owidth(l) for s in b['strs'] for l in olines(s)] or [0])
+        for s in b['strs']:
+            i=idx.get(tuple(s))
+            if i is not None: tm[i]=max(tm.get(i,0),w)
+    return tm
+TABLEMAX=None
 SYM=set('♀♂―…、。!?「」『』()・~♪★☆※×○●◆◇△▲▼→←↑↓%+-:/.,\'"#&*=<>[]_ 0123456789')
 TOK=re.compile(r'\{[0-9A-F]{4}\}')
 # icon-atlas cells that are kanji, not buttons: must be written out in Korean
@@ -47,7 +57,9 @@ def check(i,ja,ko):
     for k,l in enumerate(kl):
         w=kwidth(TOK.sub('',l))
         ow=owidth(ol[k]) if k<len(ol) else 0
-        lim=max(ow,390) if dialog else max(ow,15)
+        global TABLEMAX
+        if TABLEMAX is None: TABLEMAX=_tablemax()
+        lim=max(ow,390) if dialog else max(ow,15,min(TABLEMAX.get(i,0),ow+45) if ow>=30 else ow)
         if w>lim: errs.append('%d번째 줄 폭 초과 %dpx>%dpx (%s)'%(k+1,w,lim,TOK.sub('',l)))
     return errs
 def run(name):
